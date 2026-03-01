@@ -313,19 +313,15 @@ void setup() {
   setupWeb();
   setupWebSocket();
 
-
-  //WindowBlinds.begin(lastLiftPercent, lastTiltPercent, MatterWindowCovering::BLIND_LIFT_AND_TILT);
-
+  WindowBlinds.begin(100, 0, MatterWindowCovering::ROLLERSHADE);
+  
   // Set up the onGoToLiftPercentage callback - this handles all window covering changes requested by the Matter Controller
   
   WindowBlinds.onOpen(fullOpen);
   WindowBlinds.onClose(fullClose);
   WindowBlinds.onGoToLiftPercentage(goToLiftPercentage);
   WindowBlinds.onStop(motorStop);
-
-
-
-
+  
   // Start Matter
   Matter.begin();
   Serial.println("Matter started");

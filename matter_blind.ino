@@ -2,23 +2,46 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <WiFiProvisioner.h>
 #include <Preferences.h>
+#include "SSD1306.h"  
 #include <index_html.h>
 //#include <AsyncWebSocket.h>
 
-#define RELAY_UP_PIN     33
-#define RELAY_DOWN_PIN   32
+
+//this is for ESP32 Oled Wemos Lolin32 w/ SSD1306 
+//Test w/ Wroom.  Single-core C3 crashes when matter starts
+
+#define WIFI_NAMESPACE "wifi"
+#define CONNECT_TIMEOUT_MS 10000
+
+
+int relayUpPin = 33;
+int relayDownPin = 32;
 #define PULSE_PIN        4   // input-only pin, safe for interrupts
+#define OLED_RESET -1
+#define BOOT_BUTTON_PIN 0
+
+// Initialize the OLED display using Wire library
+SSD1306  display(0x3c, 5, 4);
+
+int motorOrientation = 0; // 0 = left, 1 = right
+
+bool bootButtonState = false;
+bool lastBootButtonState = false;
 
 // List of Matter Endpoints for this Node
 // Window Covering Endpoint
 MatterWindowCovering WindowBlinds;
 
+String stored_ssid;
+String stored_pass;
+
 const char* ssid = "Hungster2";
 const char* password = "hungster";
 const char *liftPercentPrefKey = "LiftPercent";
 
-const uint32_t PULSE_DEBOUNCE_US = 400;
+const uint32_t PULSE_DEBOUNCE_US = 300;
 //const uint32_t POSITION_SAVE_INTERVAL_MS = 10;
 
 enum BlindState {
@@ -47,7 +70,8 @@ uint currentLiftPercent = 0;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 Preferences bprefs;
-
+Preferences preferences;
+WiFiProvisioner provisioner;
 
 void IRAM_ATTR pulseISR() {
   uint32_t now = millis();
@@ -59,11 +83,38 @@ void IRAM_ATTR pulseISR() {
   }
 }
 
+void configureMotorPins(int upPin, int downPin) {
+
+  motorStop();
+  // Disable old pins
+  relayUpPin = upPin;
+  relayDownPin = downPin;
+  pinMode(relayUpPin, OUTPUT);
+  pinMode(relayDownPin, OUTPUT);
+  digitalWrite(relayUpPin, LOW);
+  digitalWrite(relayDownPin, LOW);
+
+  Serial.printf("Motor pins configured: UP=%d DOWN=%d\n", relayUpPin, relayDownPin);
+
+  motorOrientation = (upPin == 33) ? 0 : 1;
+
+  bprefs.begin("blind", false);
+  bprefs.putInt("motorOrient", motorOrientation);
+  bprefs.end();
+}
+
+
 void loadPosition() {
-  bprefs.begin("urblind", false);
+  bprefs.begin("dablind", false);
   dablind.current = bprefs.getInt("current", 1);
   dablind.max     = bprefs.getInt("max", 11);
+  motorOrientation = bprefs.getInt("motorOrient", 0);
   bprefs.end();
+
+  if (motorOrientation == 0)
+    configureMotorPins(33, 32);
+  else
+    configureMotorPins(32, 33);
 
   pulseCount = dablind.current;
 
@@ -80,7 +131,7 @@ void savePositionIfChanged(bool force = false) {
 
   if (!changed && !force) return;
 
-  bprefs.begin("urblind", false);
+  bprefs.begin("dablind", false);
   bprefs.putInt("current", pulseCount);
   bprefs.putInt("max", dablind.max);
   int current2 = bprefs.getInt("current");
@@ -94,8 +145,8 @@ void savePositionIfChanged(bool force = false) {
 }
 
 bool motorStop() {
-  digitalWrite(RELAY_UP_PIN, HIGH);
-  digitalWrite(RELAY_DOWN_PIN, HIGH);
+  digitalWrite(relayUpPin, HIGH);
+  digitalWrite(relayDownPin, HIGH);
   pulseDirection = 0;
   blindState = STOPPED;
   WindowBlinds.setOperationalState(MatterWindowCovering::LIFT, MatterWindowCovering::STALL);
@@ -111,7 +162,7 @@ void motorUp() {
   motorStop();
   Serial.print("motorUp");
   WindowBlinds.setOperationalState(MatterWindowCovering::LIFT, MatterWindowCovering::MOVING_UP_OR_OPEN);
-  digitalWrite(RELAY_UP_PIN, LOW);
+  digitalWrite(relayUpPin, LOW);
   pulseDirection = -1;
   blindState = MOVING_UP;
 }
@@ -120,7 +171,7 @@ void motorDown() {
   motorStop();
   Serial.print("motorDown");
   WindowBlinds.setOperationalState(MatterWindowCovering::LIFT, MatterWindowCovering::MOVING_DOWN_OR_CLOSE);
-  digitalWrite(RELAY_DOWN_PIN, LOW);
+  digitalWrite(relayDownPin, LOW);
   pulseDirection = +1;
   blindState = MOVING_DOWN;
 }
@@ -188,14 +239,13 @@ bool fullClose() {
 // Simple callback - handles window Lift change request
 bool goToLiftPercentage(uint8_t liftPercent) {
   Serial.printf("goToLiftPercentage: Lift=%d%%\r\n", liftPercent);
-  int32_t newTarget = (liftPercent * dablind.max) / 100;
+  int32_t newTarget =  liftPercent * dablind.max / 100;
   moveTo(newTarget);  // your function
+  Serial.print("newTarget");
+  Serial.print(newTarget);
   // Returning true will store the new Lift value into the Matter Cluster
   return true;
 }
-
-
-
 
 
 
@@ -248,6 +298,16 @@ server.on("/stepDown", HTTP_GET, [](AsyncWebServerRequest *req){
     req->send(200, "text/plain", "DOWN SET");
   });
   
+  server.on("/motorLeft", HTTP_GET, [](AsyncWebServerRequest *req){
+  configureMotorPins(33, 32);
+  req->send(200, "text/plain", "Motor on Left");
+});
+
+server.on("/motorRight", HTTP_GET, [](AsyncWebServerRequest *req){
+  configureMotorPins(32, 33);
+  req->send(200, "text/plain", "Motor on Right");
+});
+
   server.on("/pos", HTTP_GET, [](AsyncWebServerRequest *req){
     int percent = dablind.max > 0 ? (pulseCount * 100) / dablind.max : 0;
    
@@ -294,34 +354,144 @@ void broadcastStatus() {
   ws.textAll(json);
 }
 
-void setup() {
-  pinMode(RELAY_UP_PIN, OUTPUT);
-  pinMode(RELAY_DOWN_PIN, OUTPUT);
+bool connectToWiFi(const char* ssid, const char* password)
+{
+  Serial.printf("Connecting to SSID: %s\n", ssid);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  unsigned long startAttemptTime = millis();
+
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - startAttemptTime < CONNECT_TIMEOUT_MS)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("\nWiFi Connected.");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  }
   
+
+  Serial.println("\nWiFi connection failed.");
+  WiFi.disconnect(true);
+  return false;
+}
+
+void showIPAddress() {    //when press Boot button, shows the IP address on OLED
+  display.clear();
+  display.setFont(ArialMT_Plain_16);
+  display.println(WiFi.localIP());
+  display.display();
+}
+
+void clearScreen() {
+  display.clear();
+  display.display();
+}
+
+void loadCredentials()
+{
+  preferences.begin(WIFI_NAMESPACE, true);
+  stored_ssid = preferences.getString("ssid", "");
+  stored_pass = preferences.getString("pass", "");
+  preferences.end();
+}
+
+void saveCredentials(const char* ssid, const char* password)
+{
+  preferences.begin(WIFI_NAMESPACE, false);
+  preferences.putString("ssid", ssid);
+  preferences.putString("pass", password);
+  preferences.end();
+}
+
+void startProvisioning()
+{
+  Serial.println("Starting provisioning AP...");
+
+  //provisioner.getConfig().AP_SSID = "ESP32_Setup";
+  //provisioner.getConfig().AP_PASSWORD = "12345678";   // >= 8 chars
+  provisioner.getConfig().SHOW_INPUT_FIELD = false;   // optional extra field
+
+  provisioner.onSuccess([](const char* ssid,
+                           const char* password,
+                           const char* input)
+  {
+    Serial.println("Provisioning successful.");
+    Serial.printf("SSID: %s\n", ssid);
+
+    saveCredentials(ssid, password);
+
+    delay(1000);
+    ESP.restart();
+  });
+
+  provisioner.startProvisioning();
+}
+
+
+
+void setup() {
+  //  pinMode(buttonPin, INPUT_PULLUP);
+  configureMotorPins(33, 32);   // default: motor on left
+
   pinMode(PULSE_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PULSE_PIN), pulseISR, FALLING);
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+
 
   Serial.begin(115200);
+
+  display.init();
+//  display.flipScreenVertically();
+  display.setFont(ArialMT_Plain_16);
+  display.clear();
+//  display.setColor(WHITE);
+//  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.println("ESP32 Wifi Provision");
+  display.display();
+  
+  loadCredentials();
+
+  if (stored_ssid.length() > 0)
+  {
+    if (connectToWiFi(stored_ssid.c_str(), stored_pass.c_str()))
+    {
+      Serial.println("Normal operation mode.");
+    }
+  }
+  else {
+  // If no credentials or connection failed:
+  startProvisioning(); }
+
+  
 
   loadPosition();
   motorStop();
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) delay(100);
-  Serial.print("Connected ESP IP: "); Serial.println(WiFi.localIP());
-
   setupWeb();
   setupWebSocket();
 
+
   WindowBlinds.begin(100, 0, MatterWindowCovering::ROLLERSHADE);
-  
+
   // Set up the onGoToLiftPercentage callback - this handles all window covering changes requested by the Matter Controller
   
   WindowBlinds.onOpen(fullOpen);
   WindowBlinds.onClose(fullClose);
   WindowBlinds.onGoToLiftPercentage(goToLiftPercentage);
   WindowBlinds.onStop(motorStop);
-  
+
+
+
+
   // Start Matter
   Matter.begin();
   Serial.println("Matter started");
@@ -341,13 +511,29 @@ void setup() {
 void loop() {
   updateMotion();
 //  updatePersistence();
+  bootButtonState = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+
+  if (bootButtonState != lastBootButtonState) {
+
+    if (bootButtonState) {
+      // Button pressed
+      if (WiFi.status() == WL_CONNECTED) {
+        showIPAddress();
+      }
+    } else {
+      // Button released
+      clearScreen();
+    }
+
+    lastBootButtonState = bootButtonState;
+  }
   ws.cleanupClients();
-  if (Matter.isDeviceCommissioned()) {
-    Serial.printf("Initial state: Lift=%d%%, Tilt=%d%%\r\n", WindowBlinds.getLiftPercentage());
+//  if (Matter.isDeviceCommissioned()) {
+   // Serial.printf("Initial state: Lift=%d%%, Tilt=%d%%\r\n", WindowBlinds.getLiftPercentage());
     // Update visualization based on initial state
 //    visualizeWindowBlinds(WindowBlinds.getLiftPercentage());
-    Serial.println("Matter Node is commissioned and connected to the network. Ready for use.");
-  }
-
+//    Serial.print("M");
+//  }
+  //displayIP();
 
 }

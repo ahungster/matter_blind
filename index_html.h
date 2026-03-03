@@ -28,6 +28,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   <button onclick="sendCmd('setTop')">Set Top</button>
   <button onclick="sendCmd('setBott')">Set Bottom</button>
 
+  <h3>Motor Position</h3>
+  <button onclick="sendCmd('motorLeft')">Motor on Left</button>
+  <button onclick="sendCmd('motorRight')">Motor on Right</button>
+  
   <script>
     let ws = new WebSocket('ws://' + location.host + '/ws');
 

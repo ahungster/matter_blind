@@ -1,10 +1,11 @@
 # matter_blind
 This is firmware for matter compatible outdoor blind.  
 
+<img src="images/blindQR.jpg" alt="blind" width="400">
 
-<img src="roller%20blind.jpg" alt="blind" width="400">
+<img src="images/roller%20blind.jpg" alt="blind" width="400">
 
-<img src="r%20blind%20automation.jpg" alt="automation" width="200">
+<img src="images/automation.jpg" alt="automation" width="200">
 
 
 

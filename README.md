@@ -16,8 +16,8 @@ Setup automation in google Home
 
 Parts:   
 Aluminum downspout, or 2x3 stud   
-Silver Tarp
-Spray glue
+Silver Tarp   
+Spray glue   
 Motor 68ktyz, recommend 10rpm.  
 Micro switch cyt1073   
 Esp32 Oled, Wemos Lolin   

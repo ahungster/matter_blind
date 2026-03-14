@@ -1,5 +1,8 @@
 # matter_blind
 This is firmware for matter compatible outdoor blind.  
+
+
+
 Parts:
 Aluminum downspout, or 2x3 stud
 Silver Tarp

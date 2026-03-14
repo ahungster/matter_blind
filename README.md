@@ -1,14 +1,19 @@
 # matter_blind
 This is firmware for matter compatible outdoor blind.  
 
-![automation](https://github.com/ahungster/matter_blind/blob/70169d13af625023c312fdca043bea69eb057b24/r%20blind%20automation.jpg)
+
+<img src="roller%20blind.jpg" alt="blind" width="400">
+
+<img src="r%20blind%20automation.jpg" alt="automation" width="200">
+
+
 
 Parts:
-Aluminum downspout, or 2x3 stud
+Aluminum downspout, or 2x3 stud   
 Silver Tarp
 
 Motor 68ktyz, recommend 10rpm.  
-Micro switch cyt1073
-Esp32 Oled, Wemos Lolin
-Solid state relay 2 channel 5v
+Micro switch cyt1073   
+Esp32 Oled, Wemos Lolin   
+Solid state relay 2 channel 5v   
 5V700MA power supply 

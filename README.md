@@ -2,15 +2,19 @@
 This is firmware for matter compatible outdoor blind.  
 <img src="images/roller%20blind.jpg" alt="blind" width="400">
 
-Add matter device by QR code
+after wifi provisioning, press button to show its IP address on OLED screen   
+Use its webserver to adjust the blind length    
+<img src="images/webserv.jpg" alt="blind" width="200">
+
+Add matter device by QR code   
 <img src="images/matter simp blind.png" alt="blind" width="200">
 
-Setup automation in google Home
+Setup automation in google Home    
 <img src="images/automation.jpg" alt="automation" width="200">
 
 
 
-Parts:
+Parts:   
 Aluminum downspout, or 2x3 stud   
 Silver Tarp
 

@@ -25,3 +25,5 @@ Esp32 Oled, Wemos Lolin
 Solid state relay 2 channel 5v   
 5V700MA power supply 
 
+Wiring:   
+<img src="images/wire schematic.jpg" alt="wires" width="500">

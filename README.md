@@ -13,6 +13,7 @@ Setup automation in google Home
 <img src="images/automation.jpg" alt="automation" width="200">
 
 
+Most other projects use 28byj motor, which is insufficient for large blinds.  Instead of upsizing to expensive stepper, here we use a simple AC motor.   
 
 Parts:   
 Aluminum downspout, or 2x3 stud       
